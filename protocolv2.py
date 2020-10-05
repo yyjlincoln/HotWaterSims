@@ -8,7 +8,7 @@ import secrets
 import logging
 import kmp
 
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
 
 class Events():
@@ -87,8 +87,12 @@ class Events():
                 @wraps(func)
                 def _process_request(*args, **kw):
                     res = func(*args, **kw)
-                    res_packed = self.make(
-                        'response', res, ref=head['ref'], client_id=head['client_id'])
+                    try:
+                        res_packed = self.make(
+                            'response', res, ref=head['ref'], client_id=head['client_id'])
+                    except:
+                        raise Exception(
+                            'A valid response is expected from the event handler function ' + func.__name__ + ', for event '+event+'. This must be a dictionary that can be jsonified. Found '+str(res)+'.')
                     # Now send back the response
                     try:
                         open_connection.send(res_packed)
@@ -156,3 +160,7 @@ class Events():
             if newcont == b'':
                 # Socket is disconnected
                 raise Exception('Socket is disconnected')
+
+    def emit(self, event, body, openconn, client_id=None):
+        openconn.send(self.make(event=event, body=body,
+                                ref=secrets.token_hex(16), client_id=client_id))
