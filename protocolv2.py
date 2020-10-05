@@ -31,7 +31,7 @@ class Events():
                 'Body must be a dictionary so it can be encoded to json format!')
 
         head = struct.pack(self.struct_format, self.client_id.encode('utf-8') if not client_id else client_id.encode('utf-8'),
-                           secrets.token_hex(16).encode('utf-8') if not ref else ref.encode('utf-8'), event.encode('utf-8'), time.time())
+                           secrets.token_hex(8).encode('utf-8') if not ref else ref.encode('utf-8'), event.encode('utf-8'), time.time())
         # Try to encode body
         try:
             body = json.dumps(body).encode('utf-8')
@@ -142,12 +142,14 @@ class Events():
                         if head and body:
                             if head['ref'] in self.intercept:
                                 for callback in self.intercept[head['ref']]:
-                                    callback(head=head, open_connection=open_connection, _do_not_directly_call=False)(
-                                        head, body)
-                            if head['ev'] in self.event_callbacks:
-                                for callback in self.event_callbacks[head['ev']]:
-                                    callback(head=head, open_connection=open_connection, _do_not_directly_call=False)(
-                                        head, body)
+                                    # For intercept callbacks, those are just "response" functions.
+                                    # This is equivilent of writing @ctx.response() and then filter the ref.
+                                    callback(head, body)
+                            else:
+                                if head['ev'] in self.event_callbacks:
+                                    for callback in self.event_callbacks[head['ev']]:
+                                        callback(head=head, open_connection=open_connection, _do_not_directly_call=False)(
+                                            head, body)
                         else:
                             logging.warning('Unable to parse the request!')
                     except Exception as e:
@@ -186,7 +188,7 @@ class Events():
             return self
 
     def emit(self, event, body, openconn, client_id=None):
-        ref = secrets.token_hex(16)
+        ref = secrets.token_hex(8)
         r = openconn.send(self.make(event=event, body=body,
                                 ref=ref, client_id=client_id))
 
