@@ -12,11 +12,14 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 class Events():
-    def __init__(self, client_id):
+    def __init__(self, client_id=None, server_mode=False):
+        if not client_id and not server_mode:
+            raise Exception(
+                'A client_id must be supplied if server_mode is set to false.')
         self.client_id = client_id
         self.struct_format = '16s16s16sf'
         self.event_callbacks = {}
-        self.server_mode = False
+        self.server_mode = server_mode
         super().__init__()
 
     def make(self, event, body, ref=None, client_id=None):
@@ -51,7 +54,7 @@ class Events():
             ref = ref.decode('utf-8').split('\0', 1)[0]
             ev = ev.decode('utf-8').split('\0', 1)[0]
         except struct.error as e:
-            logging.info('Failed to unpack head due to struct error. ' + str(e))
+            logging.info('Failed to unpack head due to struct error. ', e)
             return None, None
 
         if client_id != self.client_id and not self.server_mode:
@@ -62,7 +65,7 @@ class Events():
         try:
             body = json.loads(body)
         except json.JSONDecodeError as e:
-            logging.warning('Could not decode body. Discard message.'+ str(e))
+            logging.warning('Could not decode body. Discard message.', e)
             return None, None
 
         return {
@@ -76,7 +79,7 @@ class Events():
         def _initialize_on(func):
 
             @wraps(func)
-            def _on_specific_event(*, head, _do_not_directly_call=True):
+            def _on_specific_event(*, head, open_connection, _do_not_directly_call=True):
                 if not head or _do_not_directly_call:
                     raise RuntimeError(
                         '''Event handlers must not be called directly. If this is not called directly, then ref is missing.''')
@@ -84,7 +87,16 @@ class Events():
                 @wraps(func)
                 def _process_request(*args, **kw):
                     res = func(*args, **kw)
-                    return self.make('response', res, ref=head['ref'], client_id=head['client_id'])
+                    res_packed = self.make(
+                        'response', res, ref=head['ref'], client_id=head['client_id'])
+                    # Now send back the response
+                    try:
+                        open_connection.send(res_packed)
+                    except Exception as e:
+                        logging.exception(e)
+                        raise Exception(
+                            'Unable to send the request due to connection error!')
+
                 return _process_request
 
             if event in self.event_callbacks:
@@ -120,13 +132,13 @@ class Events():
                         if head and body:
                             if head['ev'] in self.event_callbacks:
                                 for callback in self.event_callbacks[head['ev']]:
-                                    callback(head = head, _do_not_directly_call = False)(head, body)
+                                    callback(head=head, open_connection=open_connection, _do_not_directly_call=False)(
+                                        head, body)
                         else:
                             logging.warning('Unable to parse the request!')
                     except Exception as e:
                         logging.exception(e)
                         raise
-
 
                     # Only preserve buffer after the end flag. i.e. Delete unused / unmatched buffer
                     # as they will no longer be matched correctly. for example, ab$$$$cde!!!!fg --> buffer = fg.
@@ -144,27 +156,3 @@ class Events():
             if newcont == b'':
                 # Socket is disconnected
                 raise Exception('Socket is disconnected')
-
-
-t = Events('testID')
-
-
-@t.on('test')
-def test(head, body):
-    logging.debug(head, body)
-    print(body)
-    return {
-        'c': 'ok'
-    }
-
-print(t.make('test',{
-    'test':True
-}))
-
-s = socket.socket()
-s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-s.bind(('0.0.0.0', 8080))
-s.listen(10)
-con, addr = s.accept()
-logging.debug('Started')
-t.listen(con)
