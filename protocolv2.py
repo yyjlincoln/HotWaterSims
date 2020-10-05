@@ -179,10 +179,10 @@ class Events():
         def then(self, callback):
             if not callable(callback):
                 raise Exception('Callback is not callable!')
-            if ref in self.that.intercept:
-                self.that.intercept[ref].append(callback)
+            if self.ref in self.that.intercept:
+                self.that.intercept[self.ref].append(callback)
             else:
-                self.that.intercept[ref] = [callback]
+                self.that.intercept[self.ref] = [callback]
             return self
 
     def emit(self, event, body, openconn, client_id=None):
