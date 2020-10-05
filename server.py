@@ -24,9 +24,7 @@ def connectionMonitor(openconn):
         }
 
     ctx.listen(openconn)
-
     
-
 
 while True:
     openconn, addr = s.accept()
