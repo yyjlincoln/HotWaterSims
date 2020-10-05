@@ -95,40 +95,37 @@ class Events():
     def listen(self, open_connection):
         expect = True  # This gets toggled every time something is detected.
         buffer = b''
-        last_index = -1
-        open_connection.settimeout(0.1)
         while True:
             try:
                 newcont = open_connection.recv(2048)
                 buffer += newcont
-            except socket.timeout:
-                newcont = None
-                # Check the buffer again, and mark content = None to flag that the socket is still connected.
             except:
                 raise Exception('Socket disconnected')
 
             print('Buffer', buffer)
             s = kmp.kmp_search(b'$$$$' if expect else b'!!!!', buffer)
-            if s != -1:
+            while s != -1:
                 # Tag detected.
                 if not expect:  # It was an end tag
                     print('End tag at', s)
-                    print(buffer[last_index:s+4])
+                    print(buffer[:s+4])
                     print('Above content')
                     # Only preserve buffer after the end flag. i.e. Delete unused / unmatched buffer
                     # as they will no longer be matched correctly. for example, ab$$$$cde!!!!fg --> buffer = fg.
                     buffer = buffer[s+4:]
-                    last_index = -1
                 else:
                     print('Start tag at', s)
-                    last_index = s
+                    # Clear buffer before
+                    buffer = buffer[s:]
 
                 expect = not expect  # Reverse the expect, find the end tag
-            else:
-                # There is no match
-                if newcont==b'':
-                    # Socket is disconnected
-                    raise Exception('Socket is disconnected')
+
+                s = kmp.kmp_search(b'$$$$' if expect else b'!!!!', buffer)
+
+            # There is no match
+            if newcont == b'':
+                # Socket is disconnected
+                raise Exception('Socket is disconnected')
 
 
 t = Events('testID')
