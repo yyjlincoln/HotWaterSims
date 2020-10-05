@@ -102,7 +102,8 @@ class Events():
                 newcont = open_connection.recv(2048)
                 buffer += newcont
             except socket.timeout:
-                pass # Check the buffer again
+                newcont = None
+                # Check the buffer again, and mark content = None to flag that the socket is still connected.
             except:
                 raise Exception('Socket disconnected')
 
@@ -129,12 +130,14 @@ class Events():
                     # Socket is disconnected
                     raise Exception('Socket is disconnected')
                 else:
-                    # Decrease the rate of checking to save computing res.
-                    open_connection.settimeout(0.5)
+                    if buffer==b'':
+                        # Disable timeout as all requests are processed, just need to wait for the next request
+                        # open_connection.settimeout(None)
+                        pass
+                    else:
+                        # Decrease the rate of checking to save computing res.
+                        open_connection.settimeout(0.1)
 
-
-            # 循环获取pool，与buffer的后3位一起使用kmp算法匹配expect（防止标志符被切断）（并循环调用kmp，切换标志符号，直到无法找到匹配为止，返回列表）。如果匹配成功则将pool中匹配到的部分与buffer一同callback，然后将剩余pool部分加入buffer；否则增加内容进buffer，进入下一轮循环。
-            # 在发送端设置queue发送；中间不需要有间隔。
 
             # # Test
             # if 'test' in self.event_callbacks:
