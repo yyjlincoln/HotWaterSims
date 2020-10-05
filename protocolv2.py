@@ -29,13 +29,13 @@ class Events():
             body = json.dumps(body).encode('utf-8')
         except json.JSONDecodeError as e:
             raise TypeError('Body must be able to converted to json format!')
-        return b'$!$!'+head+body+b'!$!$'
+        return b'$$$$'+head+body+b'!!!!'
 
     def load(self, binary, disable_client_id_check=False):
         # Check flag
-        if binary[:4] != b'$!$!' or binary[-4:] != b'!$!$':
+        if binary[:4] != b'$$$$' or binary[-4:] != b'!!!!':
             logging.warning(
-                'Invalid flag, the message should start with $!$! and end with !$!$. Discard message.')
+                'Invalid flag, the message should start with $$$$ and end with !!!!. Discard message.')
             return None, None
         binary = binary[4:-4]
         head, body = binary[:struct.calcsize(
@@ -108,7 +108,7 @@ class Events():
                 raise Exception('Socket disconnected')
 
             print('Buffer', buffer)
-            s = kmp.kmp_search(b'$!$!' if expect else b'!$!$', buffer)
+            s = kmp.kmp_search(b'$$$$' if expect else b'!!!!', buffer)
             if s != -1:
                 # Tag detected.
                 if not expect:  # It was an end tag
@@ -116,7 +116,7 @@ class Events():
                     print(buffer[last_index:s+4])
                     print('Above content')
                     # Only preserve buffer after the end flag. i.e. Delete unused / unmatched buffer
-                    # as they will no longer be matched correctly. for example, ab$!$!cde!$!$fg --> buffer = fg.
+                    # as they will no longer be matched correctly. for example, ab$$$$cde!!!!fg --> buffer = fg.
                     buffer = buffer[s+4:]
                     last_index = -1
                 else:
@@ -129,21 +129,6 @@ class Events():
                 if newcont==b'':
                     # Socket is disconnected
                     raise Exception('Socket is disconnected')
-                else:
-                    if buffer==b'':
-                        # Disable timeout as all requests are processed, just need to wait for the next request
-                        # open_connection.settimeout(None)
-                        pass
-                    else:
-                        # Decrease the rate of checking to save computing res.
-                        open_connection.settimeout(0.1)
-
-
-            # # Test
-            # if 'test' in self.event_callbacks:
-            #     for callback in self.event_callbacks['test']:
-            #         print(callback(ref='testref', _do_not_directly_call=False)(
-            #             'TestArgument'))
 
 
 t = Events('testID')
@@ -158,7 +143,7 @@ def test(Tst):
 
 
 s = socket.socket()
-s.bind(('0.0.0.0', 8081))
+s.bind(('0.0.0.0', 8080))
 s.listen(10)
 con, addr = s.accept()
 print('Started')
