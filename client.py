@@ -8,13 +8,10 @@ ctx = Events('TestClientA')
 
 ctx.emit('echo',{
     'payload!':'stuff'
-}, s)
+}, s).then(print)
 
-@ctx.on('response')
+@ctx.response()
 def res(head, body):
     print(body)
-    return {
-        'code':'ok'
-    }
 
 ctx.listen(s)

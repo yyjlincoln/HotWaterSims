@@ -10,12 +10,10 @@ s.listen(10)
 
 
 def connectionMonitor(openconn):
-    print('start')
     ctx = Events(server_mode=True)
 
     @ctx.on('echo')
     def echo(head, body):
-        print('echoservice')
         return {
             'code': 0,
             'message':'Your client id is: ' + head['client_id'],

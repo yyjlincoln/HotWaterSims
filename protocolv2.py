@@ -20,6 +20,7 @@ class Events():
         self.struct_format = '16s16s16sf'
         self.event_callbacks = {}
         self.server_mode = server_mode
+        self.intercept = {}
         super().__init__()
 
     def make(self, event, body, ref=None, client_id=None):
@@ -87,19 +88,20 @@ class Events():
                 @wraps(func)
                 def _process_request(*args, **kw):
                     res = func(*args, **kw)
-                    try:
-                        res_packed = self.make(
-                            'response', res, ref=head['ref'], client_id=head['client_id'])
-                    except:
-                        raise Exception(
-                            'A valid response is expected from the event handler function ' + func.__name__ + ', for event '+event+'. This must be a dictionary that can be jsonified. Found '+str(res)+'.')
-                    # Now send back the response
-                    try:
-                        open_connection.send(res_packed)
-                    except Exception as e:
-                        logging.exception(e)
-                        raise Exception(
-                            'Unable to send the request due to connection error!')
+                    if event!='response': # Reply is required
+                        try:
+                            res_packed = self.make(
+                                'response', res, ref=head['ref'], client_id=head['client_id'])
+                        except:
+                            raise Exception(
+                                'A valid response is expected from the event handler function ' + func.__name__ + ', for event '+event+'. This must be a dictionary that can be jsonified. Found '+str(res)+'.')
+                        # Now send back the response
+                        try:
+                            open_connection.send(res_packed)
+                        except Exception as e:
+                            logging.exception(e)
+                            raise Exception(
+                                'Unable to send the request due to connection error!')
 
                 return _process_request
 
@@ -111,6 +113,10 @@ class Events():
 
             return _on_specific_event
         return _initialize_on
+    
+    def response(self):
+        return self.on('response')
+
 
     def listen(self, open_connection):
         # This gets toggled every time something is detected.
@@ -134,6 +140,10 @@ class Events():
                     try:
                         head, body = self.load(buffer[:s+4])
                         if head and body:
+                            if head['ref'] in self.intercept:
+                                for callback in self.intercept[head['ref']]:
+                                    callback(head=head, open_connection=open_connection, _do_not_directly_call=False)(
+                                        head, body)
                             if head['ev'] in self.event_callbacks:
                                 for callback in self.event_callbacks[head['ev']]:
                                     callback(head=head, open_connection=open_connection, _do_not_directly_call=False)(
@@ -160,7 +170,24 @@ class Events():
             if newcont == b'':
                 # Socket is disconnected
                 raise Exception('Socket is disconnected')
+    
+    class EmittedEvent():
+        def __init__(self, that, ref):
+            self.that = that
+            self.ref = ref
+
+        def then(self, callback):
+            if not callable(callback):
+                raise Exception('Callback is not callable!')
+            if ref in self.that.intercept:
+                self.that.intercept[ref].append(callback)
+            else:
+                self.that.intercept[ref] = [callback]
+            return self
 
     def emit(self, event, body, openconn, client_id=None):
-        openconn.send(self.make(event=event, body=body,
-                                ref=secrets.token_hex(16), client_id=client_id))
+        ref = secrets.token_hex(16)
+        r = openconn.send(self.make(event=event, body=body,
+                                ref=ref, client_id=client_id))
+
+        return self.EmittedEvent(self, ref)
