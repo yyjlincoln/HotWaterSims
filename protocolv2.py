@@ -6,6 +6,7 @@ import random
 from functools import wraps
 import secrets
 import logging
+import kmp
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -32,8 +33,9 @@ class Events():
 
     def load(self, binary, disable_client_id_check=False):
         # Check flag
-        if binary[:4]!=b'$!$!' or binary[-4:]!=b'!$!$':
-            logging.warning('Invalid flag, the message should start with $!$! and end with !$!$. Discard message.')
+        if binary[:4] != b'$!$!' or binary[-4:] != b'!$!$':
+            logging.warning(
+                'Invalid flag, the message should start with $!$! and end with !$!$. Discard message.')
             return None, None
         binary = binary[4:-4]
         head, body = binary[:struct.calcsize(
@@ -89,29 +91,72 @@ class Events():
 
             return _on_specific_event
         return _initialize_on
-    
+
     def listen(self, open_connection):
+        expect = True  # This gets toggled every time something is detected.
+        buffer = b''
+        last_index = -1
+        open_connection.settimeout(0.1)
         while True:
-            pool = open_connection.recv(2048)
-            expect = b'$!$!' # This gets toggled every time something is detected.
-            buffer = b''
+            try:
+                newcont = open_connection.recv(2048)
+                buffer += newcont
+            except socket.timeout:
+                pass # Check the buffer again
+            except:
+                raise Exception('Socket disconnected')
+
+            print('Buffer', buffer)
+            s = kmp.kmp_search(b'$!$!' if expect else b'!$!$', buffer)
+            if s != -1:
+                # Tag detected.
+                if not expect:  # It was an end tag
+                    print('End tag at', s)
+                    print(buffer[last_index:s+4])
+                    print('Above content')
+                    # Only preserve buffer after the end flag. i.e. Delete unused / unmatched buffer
+                    # as they will no longer be matched correctly. for example, ab$!$!cde!$!$fg --> buffer = fg.
+                    buffer = buffer[s+4:]
+                    last_index = -1
+                else:
+                    print('Start tag at', s)
+                    last_index = s
+
+                expect = not expect  # Reverse the expect, find the end tag
+            else:
+                # There is no match
+                if newcont==b'':
+                    # Socket is disconnected
+                    raise Exception('Socket is disconnected')
+                else:
+                    # Decrease the rate of checking to save computing res.
+                    open_connection.settimeout(0.5)
+
+
             # 循环获取pool，与buffer的后3位一起使用kmp算法匹配expect（防止标志符被切断）（并循环调用kmp，切换标志符号，直到无法找到匹配为止，返回列表）。如果匹配成功则将pool中匹配到的部分与buffer一同callback，然后将剩余pool部分加入buffer；否则增加内容进buffer，进入下一轮循环。
             # 在发送端设置queue发送；中间不需要有间隔。
 
-            # Test
-            if 'test' in self.event_callbacks:
-                for callback in self.event_callbacks['test']:
-                    print(callback(ref='testref',_do_not_directly_call=False)('TestArgument'))
-
+            # # Test
+            # if 'test' in self.event_callbacks:
+            #     for callback in self.event_callbacks['test']:
+            #         print(callback(ref='testref', _do_not_directly_call=False)(
+            #             'TestArgument'))
 
 
 t = Events('testID')
+
 
 @t.on('test')
 def test(Tst):
     print(Tst)
     return {
-        'c':'ok'
+        'c': 'ok'
     }
 
-t.listen('1')
+
+s = socket.socket()
+s.bind(('0.0.0.0', 8081))
+s.listen(10)
+con, addr = s.accept()
+print('Started')
+t.listen(con)
