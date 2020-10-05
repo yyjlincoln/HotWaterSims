@@ -20,8 +20,12 @@ def connectionMonitor(openconn):
             'payload':body,
             'ref':head['ref']
         }
+    
+    try:
+        ctx.listen(openconn)
+    except Exception as e:
+        print('Connection terminated. ',e)
 
-    ctx.listen(openconn)
     
 
 while True:

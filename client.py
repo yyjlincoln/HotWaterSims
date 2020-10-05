@@ -1,17 +1,28 @@
 from protocolv2 import Events
 import socket
 
-s = socket.socket()
-s.connect(('localhost',8080))
+max_trial = 5
+trial = 0
 
-ctx = Events('TestClientA')
+while True:
+    s = socket.socket()
+    s.connect(('localhost', 8080))
 
-ctx.emit('echo',{
-    'payload!':'stuff'
-}, s).then(print)
+    ctx = Events('TestClientA')
 
-@ctx.response()
-def res(head, body):
-    print(body)
+    ctx.emit('echo', {
+        'payload!': 'stuff'
+    }, s).then(print)
 
-ctx.listen(s)
+    @ctx.response()
+    def res(head, body):
+        print(body)
+
+    try:
+        ctx.listen(s)
+        # This will block all requests until an exception is thrown
+    except:
+        trial += 1
+        if trial == max_trial:
+            break
+        continue
